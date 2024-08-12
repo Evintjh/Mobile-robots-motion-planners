@@ -34,3 +34,7 @@ roslaunch free_space_motion_tube_ros move_base_free_space.launch
 
 https://github.com/user-attachments/assets/edda02c9-661a-4803-a44e-269968921c8c
 
+## Results
+- Static obstacle avoidance
+  - freespace motion tube is less conservative than DWA
+  - lower chances of getting stucked at local extrema
