@@ -54,9 +54,9 @@
   </node>
 
 
-<node pkg="free_space_motion_tube_ros" type="barn_motion_tube_node" respawn="true" name="barn_motion_tube_node" >
+<!-- <node pkg="free_space_motion_tube_ros" type="barn_motion_tube_node" respawn="true" name="barn_motion_tube_node" >
     <remap from="front/scan" to="laser_scan" />
     <remap from="odometry/filtered" to="odom" />
-</node>
+</node> -->
 
 </launch>

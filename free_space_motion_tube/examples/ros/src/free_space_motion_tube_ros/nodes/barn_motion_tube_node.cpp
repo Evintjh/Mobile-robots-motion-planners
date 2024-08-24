@@ -1,7 +1,8 @@
 // Standard
 #include <sstream>
 #include <time.h>
-# include <algorithm>
+#include <algorithm>
+#include <iostream>
 
 // ROS
 #include "ros/ros.h"
@@ -13,6 +14,10 @@
 #include "nav_msgs/Odometry.h"
 #include "nav_msgs/Path.h"
 #include "geometry_msgs/PoseStamped.h"
+#include <tf2/transform_datatypes.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_ros/transform_listener.h>
+#include <geometry_msgs/TransformStamped.h>
 
 // Motion tube libraries
 #include "barn_motion_tube.h"
@@ -55,6 +60,7 @@ class BarnMotionTubeNode
         range_scan_t range_scan_;        //! sensor measurements
         pose2d_t pose_odom_;             //! pose of the vehicle in odom frame
         pose2d_t pose_;                  //! pose of the vehicle in map frame
+        pose2d_t vel_odom_;
         point2d_array_t waypoints_;
         // Motion tube
         BarnMotionTube barn_motion_tube_;
@@ -63,15 +69,29 @@ class BarnMotionTubeNode
         // Selection
         std::vector<std::vector<double>> cost_;
 
+        typedef struct {
+            double sim_period;
+            double acc_lim_x;
+            double acc_lim_y;
+            double acc_lim_theta;
+        } AccLimits;
+        bool goal_arrived;
+        double distance_to_goal;
+        double goal_y_in_base;
+        double goal_x_in_base;
+        
+
     public:
         BarnMotionTubeNode(void);
         // Standard local base planner
         void ScanCallback(const sensor_msgs::LaserScan::ConstPtr& msg); 
         void OdomCallback(const nav_msgs::Odometry::ConstPtr& msg);
-        void GoalCallback(const geometry_msgs::Point::ConstPtr& msg);
-
+        void GoalCallback(const geometry_msgs::PoseStamped::ConstPtr& msg);
+        void BrakeWithAccLimits();
+        double sign(double x);
         // Alternative way to get nav_msgs
         void GlobalNavPlannerCallback(const nav_msgs::Path::ConstPtr& msg);
+        geometry_msgs::PoseStamped goal_;
 
         
 };
@@ -89,12 +109,13 @@ BarnMotionTubeNode::BarnMotionTubeNode(void)
     // Setting publisher and subscribers
     cmd_vel_pub_ = node_.advertise<geometry_msgs::Twist>("cmd_vel", 1);
     path_pub_ = node_.advertise<nav_msgs::Path>("projected_path", 1);
-    scan_sub_ = node_.subscribe("front/scan", 1000, 
+    scan_sub_ = node_.subscribe("laser_scan", 1000, 
         &BarnMotionTubeNode::ScanCallback, this);
-    odom_sub_ = node_.subscribe("odometry/filtered", 1000,  
+    odom_sub_ = node_.subscribe("odom", 1000,  
         &BarnMotionTubeNode::OdomCallback, this);
     global_planner_sub_ = node_.subscribe("/move_base/NavfnROS/plan", 1000,  
         &BarnMotionTubeNode::GlobalNavPlannerCallback, this);
+    goal_sub_ = node_.subscribe("/move_base_simple/goal", 1000, &BarnMotionTubeNode::GoalCallback, this);
 
 
     // Motion tubes
@@ -290,11 +311,23 @@ void BarnMotionTubeNode::ScanCallback(const sensor_msgs::LaserScan::ConstPtr& ms
         last_forward_vel=twist_message.linear.x ;
         last_w_vel = twist_message.angular.z;
     }else 
-    {
+    {   
+        // obstacle avoidance behavior portion
+
+        // logic which causes irrational spinning. However, seldom goes 
+        // into this loop with new param. Input brake function here
+
         if (fabs(last_w_vel) > 1e-1 ){
             twist_message.linear.x = -.0;
             twist_message.angular.z = .75*last_w_vel/fabs(last_w_vel);
-        }else{
+        }
+
+        if (goal_arrived) BrakeWithAccLimits();
+        
+        
+        // when footprint is increased, this case gets triggered mostly
+        else if (!goal_arrived){
+            std::cout<< "avoidance" << std::endl; 
             twist_message.linear.x = -0.3;
             twist_message.angular.z = 0.0;
         }
@@ -312,7 +345,7 @@ void BarnMotionTubeNode::ScanCallback(const sensor_msgs::LaserScan::ConstPtr& ms
     // // uses the most recent time horizon as reference
     double time_horizon_path = barn_motion_tube_.params_.vec_mp_params.back().time_horizon;
 
-    std::cout<< "horizon period: " << time_horizon_path << std::endl;
+    // std::cout<< "horizon period: " << time_horizon_path << std::endl;
     double sim_granularity = 0.02;
     int min_no_pts = int(time_horizon_path/sim_granularity);
     double dt = time_horizon_path/min_no_pts;
@@ -368,6 +401,26 @@ void BarnMotionTubeNode::ScanCallback(const sensor_msgs::LaserScan::ConstPtr& ms
     print=false;
 }
 
+double BarnMotionTubeNode::sign(double x){
+    return x < 0.0 ? -1.0 : 1.0;
+  }
+
+void BarnMotionTubeNode::BrakeWithAccLimits(){
+    geometry_msgs::Twist twist_msg;
+
+    // Define the limits
+    AccLimits acc_limits = {2.0, 5.0, 5.0, 20.0};
+
+    double vx = sign(vel_odom_.x) * std::max(0.0, fabs(vel_odom_.x - acc_limits.acc_lim_x * acc_limits.sim_period));
+    double vy = sign(vel_odom_.y) * std::max(0.0, fabs(vel_odom_.y - acc_limits.acc_lim_y * acc_limits.sim_period));
+    double vth = sign(vel_odom_.yaw) * std::max(0.0, (fabs(vel_odom_.yaw) - acc_limits.acc_lim_theta * acc_limits.sim_period));
+    twist_msg.linear.x = vx;
+    twist_msg.linear.y = vy;
+    twist_msg.angular.z = vth;
+    cmd_vel_pub_.publish(twist_msg);
+}
+
+
 //! @breif: Subscribe to odometry in Odom frame
 void BarnMotionTubeNode::OdomCallback(const nav_msgs::Odometry::ConstPtr& msg)
 {
@@ -384,10 +437,37 @@ void BarnMotionTubeNode::OdomCallback(const nav_msgs::Odometry::ConstPtr& msg)
     pose_odom_.x = x; 
     pose_odom_.y = y;
     pose_odom_.yaw =  yaw;
+    vel_odom_.x = msg->twist.twist.linear.x;
+    vel_odom_.y = msg->twist.twist.linear.y;
+    vel_odom_.yaw = msg->twist.twist.angular.z;
+
+
+        // You can use these values to compute the distance or other relative metrics
+        // distance_to_goal = sqrt(goal_x_in_base * goal_x_in_base + goal_y_in_base * goal_y_in_base);
+        distance_to_goal = sqrt((goal_.pose.position.x - pose_odom_.x) * (goal_.pose.position.x - pose_odom_.x) + (goal_.pose.position.y - pose_odom_.y) * (goal_.pose.position.y - pose_odom_.y));
+        std::cout<< distance_to_goal << std::endl;
+
+        // Check if the robot has arrived at the goal. This distance threshold 
+        // must be longer than the length of a generated motion tube / before distance_to_goal runs out
+        if (distance_to_goal < 0.5) {
+            goal_arrived = true;
+            std::cout << "goal reaching" <<std::endl;
+        } else {
+            goal_arrived = false;
+            // std::cout << "goal NOT reaching" <<std::endl;
+
+        }
+
 }
 
-void BarnMotionTubeNode::GoalCallback(const geometry_msgs::Point::ConstPtr& msg)
+void BarnMotionTubeNode::GoalCallback(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {
+    // Store the received goal
+    if (msg->pose.position.x != 0.0){
+        goal_ = *msg;
+        std::cout<< "goal" << goal_ <<std::endl; 
+    
+}
 
 }
 
@@ -450,7 +530,6 @@ double compute_points_distance(point2d_t *p1, point2d_t *p2)
 
 void PrintPoint2dArray(point2d_array_t *points)
 {
-    //std::cout << points->number_of_points << " ";
     for(size_t i=0; i<points->number_of_points; i++)
     {
         std::cout << points->points[i].x << " " << points->points[i].y << " ";
