@@ -37,4 +37,4 @@ https://github.com/user-attachments/assets/edda02c9-661a-4803-a44e-269968921c8c
 ## Results
 - Static obstacle avoidance
   - freespace motion tube is less conservative than DWA
-  - lower chances of getting stucked at local extrema
+  - freespace motion tube has lower chances of getting stucked at local extrema comapared to DWA
