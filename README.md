@@ -52,3 +52,6 @@ https://github.com/user-attachments/assets/7f986112-e313-4ea0-952c-a40370b5e3fa
 - Static obstacle avoidance
   - freespace motion tube is less conservative than DWA
   - freespace motion tube has lower chances of getting stucked at local extrema comapared to DWA
+ 
+- Dynamic obstacle avoidance
+  - freespace motion tube is less reactive & more predictive than DWA planner, allowing smoother navigation
