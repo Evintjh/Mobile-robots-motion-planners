@@ -118,7 +118,7 @@ BarnMotionTubeNode::BarnMotionTubeNode(void)
     goal_sub_ = node_.subscribe("/move_base_simple/goal", 1000, &BarnMotionTubeNode::GoalCallback, this);
 
 
-    // Motion tubes
+    // Motion tubes laser params: commented out = gazebo simulator
     range_sensor_t range_sensor; 
     // range_sensor.angular_resolution = 0.0065540750511;
     range_sensor.angular_resolution = 0.01745329238474369;
@@ -317,10 +317,10 @@ void BarnMotionTubeNode::ScanCallback(const sensor_msgs::LaserScan::ConstPtr& ms
         // logic which causes irrational spinning. However, seldom goes 
         // into this loop with new param. Input brake function here
 
-        if (fabs(last_w_vel) > 1e-1 ){
-            twist_message.linear.x = -.0;
-            twist_message.angular.z = .75*last_w_vel/fabs(last_w_vel);
-        }
+        // if (fabs(last_w_vel) > 1e-1 ){
+        //     twist_message.linear.x = -.0;
+        //     twist_message.angular.z = .75*last_w_vel/fabs(last_w_vel);
+        // }
 
         if (goal_arrived) BrakeWithAccLimits();
         
