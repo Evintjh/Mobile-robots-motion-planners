@@ -358,7 +358,7 @@ void BarnMotionTubeNode::ScanCallback(const sensor_msgs::LaserScan::ConstPtr& ms
     double projected_y = pose_odom_.y;
     double projected_yaw = pose_odom_.yaw;
 
-    // Loop through time to calculate future positions
+    // Loop through time to calculate future positions. Interpolation of final pt and initial pt to form a path
     for (double i = 0; i < time_horizon_path; i += dt) {
         // Calculate projected positions
         projected_x += twist_message.linear.x * dt * cos(projected_yaw);
