@@ -1,4 +1,5 @@
-# Mobile Robots Local planners / Motion planners
+# Mobile Robots Local planners / Motion planners for cluttered environments
+![6132134901575697787](https://github.com/user-attachments/assets/4671f018-010d-4d8a-a2d6-75458fa75a22)
 
 
 ## Installation
@@ -12,39 +13,38 @@ source devel/setup.bash
 
 ## Running the dwa planner
 ```
-roslaunch jackal_navigation odom_navigation_demo.launch
+roslaunch jackal_navigation dwa_odom.launch
 ```
 
-### Static obstacle avoidance
-https://github.com/user-attachments/assets/6a519872-aaf7-4537-be57-62861156e937
-
-### Dynamic obstacle avoidance
-
-
-https://github.com/user-attachments/assets/aac910f6-c672-43e8-96e2-c9476e6feaa4
-
-
-
-## Testing freespace motion tube / Simplified MPC
+## Running the teb planner
 ```
-roslaunch free_space_motion_tube_ros move_base_free_space.launch
+roslaunch jackal_navigation teb_odom.launch
 ```
 
-### Static obstacle avoidance
-https://github.com/user-attachments/assets/edda02c9-661a-4803-a44e-269968921c8c
-
-### Dynamic obstacle avoidance
-
-
-https://github.com/user-attachments/assets/7f986112-e313-4ea0-952c-a40370b5e3fa
-
-
+## Running the simplified MPC planner
+```
+roslaunch freespace_motion_tube_ros move_base_free_space.launch
+```
 
 
 ## Results
-- Static obstacle avoidance
-  - freespace motion tube is less conservative than DWA
-  - freespace motion tube has lower chances of getting stucked at local extrema comapared to DWA
- 
-- Dynamic obstacle avoidance
-  - freespace motion tube is less reactive & more predictive than DWA planner, allowing smoother navigation
+### Narrow corridor & Static obstacle avoidance
+![6080210709767114380](https://github.com/user-attachments/assets/eac9b394-ef3a-45a8-a8f3-edc5f035250b)
+
+
+#### Simplified MPC
+
+
+https://github.com/user-attachments/assets/4463730d-b8c5-4bd4-812e-46becfe3c1da
+
+
+
+### TEB
+
+
+https://github.com/user-attachments/assets/f42308ac-a9b9-48d2-8ccd-24cccb0bd3fc
+
+
+
+
+
