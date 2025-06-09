@@ -1,7 +1,8 @@
 <launch>
   <!-- Start the navigation stack -->
   <!-- The configuration files are loaded from jackal_helper -->
-  <param name="use_sim_time " value="true"/>
+  <param name="use_sim_time" value="true"/>
+  <!-- <param name="config_file" value="$(find barn_motion_tube_node)/config/range_sensor_config.yaml" /> -->
 
   <!-- <node pkg="laser_filters" type="scan_to_scan_filter_chain" output="screen" name="laser_filter">
         <remap from="scan" to="base_scan" />
@@ -54,9 +55,10 @@
   </node>
 
 
-<!-- <node pkg="free_space_motion_tube_ros" type="barn_motion_tube_node" respawn="true" name="barn_motion_tube_node" >
+<node pkg="free_space_motion_tube_ros" type="barn_motion_tube_node" respawn="true" name="barn_motion_tube_node" >
     <remap from="front/scan" to="laser_scan" />
     <remap from="odometry/filtered" to="odom" />
-</node> -->
+    <rosparam command="load" file="$(find free_space_motion_tube_ros)/configs/config.yaml" />
+</node>
 
 </launch>

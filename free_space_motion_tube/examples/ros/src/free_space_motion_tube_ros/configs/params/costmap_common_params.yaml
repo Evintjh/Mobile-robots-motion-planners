@@ -26,4 +26,4 @@ obstacles_layer:
   track_unknown_space: true
 
 inflater_layer:
- inflation_radius: 0.15
+ inflation_radius: 0.4

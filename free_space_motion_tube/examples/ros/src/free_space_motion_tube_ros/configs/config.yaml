@@ -1,0 +1,20 @@
+range_sensor:
+  angular_resolution: 0.01745329238474369
+  nb_measurements: 360
+  max_angle: 3.1241393089294434
+  min_angle: -3.1415927410125732
+  max_distance: 10.0
+  min_distance: 0.20
+
+brake:
+  trigger_threshold: 0.5
+
+
+# Motion tubes laser params: commented out = gazebo simulator
+# range_sensor_t range_sensor; 
+# // range_sensor.angular_resolution = 0.0065540750511;
+# // range_sensor.nb_measurements = 720;
+# // range_sensor.max_angle = 2.3561899662;
+# // range_sensor.min_angle = -2.3561899662;
+# // range_sensor.max_distance = 30.0;
+# // range_sensor.min_distance = 0.10;

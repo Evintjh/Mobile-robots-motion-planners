@@ -44,10 +44,18 @@ BarnMotionTube::BarnMotionTube()
     // Max number of samples
     params_.max_number_of_samples = 500;
     // Sampling parameters
-    params_.sampling_interval = 0.03;
+    params_.sampling_interval = 0.02;
     // Footprint
+
+    /* Dynamic */
     // double x_inflation = 0.41;
     // double y_inflation = 0.21;
+
+    /* Original or Static -> too aggressive, goes too close to obstacles, can increase y_inflation a lil */
+    // double x_inflation = 0.10;
+    // double y_inflation = 0.05;
+
+    /* Between Static & Dynamic */
     double x_inflation = 0.3;
     double y_inflation = 0.08;
     params_.footprint[FRONT_LEFT].x = 0.21 + x_inflation;

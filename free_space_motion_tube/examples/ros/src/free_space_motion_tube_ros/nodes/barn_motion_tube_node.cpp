@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <iostream>
 
+// YAML
+#include "yaml-cpp/yaml.h"
+
 // ROS
 #include "ros/ros.h"
 #include <tf2/LinearMath/Quaternion.h>
@@ -18,7 +21,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/transform_listener.h>
 #include <geometry_msgs/TransformStamped.h>
-
+#include "move_base_msgs/MoveBaseActionGoal.h"
 // Motion tube libraries
 #include "barn_motion_tube.h"
 
@@ -28,7 +31,7 @@
 #define LIDAR_OFFSET_X -0.12
 
 #define GLOBAL_PLANNER_WAYPOINT_SAMPLING_INTERVAL 0.025
-#define LOOKAHEAD_LENGTH 0.065   // .1 to make sure is ahead
+#define LOOKAHEAD_LENGTH 0.1   // .1 to make sure is ahead
 
 pose2d_t TransformPose(pose2d_t &in1, pose2d_t &in2);
 double wrap_to_pi(double angle);
@@ -62,7 +65,8 @@ class BarnMotionTubeNode
         pose2d_t pose_;                  //! pose of the vehicle in map frame
         pose2d_t vel_odom_;
         point2d_array_t waypoints_;
-        // Motion tube
+        double brake_dist;
+        // Motion tube -> utilised by defining a Class/Obj instance. NOT by inheritance.
         BarnMotionTube barn_motion_tube_;
         // Goal
         double goal_distance_offset_;
@@ -86,12 +90,15 @@ class BarnMotionTubeNode
         // Standard local base planner
         void ScanCallback(const sensor_msgs::LaserScan::ConstPtr& msg); 
         void OdomCallback(const nav_msgs::Odometry::ConstPtr& msg);
-        void GoalCallback(const geometry_msgs::PoseStamped::ConstPtr& msg);
+        // void GoalCallback(const geometry_msgs::PoseStamped::ConstPtr& msg);
+        void GoalCallback(const move_base_msgs::MoveBaseActionGoal::ConstPtr& msg);
         void BrakeWithAccLimits();
+        void loadConfigFromParam();
         double sign(double x);
         // Alternative way to get nav_msgs
         void GlobalNavPlannerCallback(const nav_msgs::Path::ConstPtr& msg);
-        geometry_msgs::PoseStamped goal_;
+        // geometry_msgs::PoseStamped goal_;
+        move_base_msgs::MoveBaseActionGoal goal_;
 
         
 };
@@ -115,24 +122,12 @@ BarnMotionTubeNode::BarnMotionTubeNode(void)
         &BarnMotionTubeNode::OdomCallback, this);
     global_planner_sub_ = node_.subscribe("/move_base/NavfnROS/plan", 1000,  
         &BarnMotionTubeNode::GlobalNavPlannerCallback, this);
-    goal_sub_ = node_.subscribe("/move_base_simple/goal", 1000, &BarnMotionTubeNode::GoalCallback, this);
+    // goal_sub_ = node_.subscribe("/move_base_simple/goal", 1000, &BarnMotionTubeNode::GoalCallback, this);
+    goal_sub_ = node_.subscribe("/move_base/goal", 1000, &BarnMotionTubeNode::GoalCallback, this);
 
+    // Load configuration from ROS parameter server
+    loadConfigFromParam();
 
-    // Motion tubes laser params: commented out = gazebo simulator
-    range_sensor_t range_sensor; 
-    // range_sensor.angular_resolution = 0.0065540750511;
-    range_sensor.angular_resolution = 0.01745329238474369;
-    // range_sensor.nb_measurements = 720;
-    range_sensor.nb_measurements = 360;
-    // range_sensor.max_angle = 2.3561899662;
-    // range_sensor.min_angle = -2.3561899662;
-    range_sensor.max_angle = 3.1241393089294434;
-    range_sensor.min_angle = -3.1415927410125732;
-    // range_sensor.max_distance = 30.0;
-    // range_sensor.min_distance = 0.10;
-    range_sensor.max_distance = 10.0;
-    range_sensor.min_distance = 0.20;
-    barn_motion_tube_.Configure(&range_sensor);
 
     // Allocate memory
     waypoints_.points = (point2d_t *) malloc(sizeof(point2d_t)*MAX_NUMBER_OF_WAYPOINTS);
@@ -158,6 +153,28 @@ BarnMotionTubeNode::BarnMotionTubeNode(void)
 
     // Configuring internal variables -> lookahead must consider the footprint of the robot too
     goal_distance_offset_ = barn_motion_tube_.params_.footprint[FRONT_LEFT].x + LOOKAHEAD_LENGTH;
+}
+
+
+// Load Configuration from ROS Parameter Server
+void BarnMotionTubeNode::loadConfigFromParam()
+{
+    ROS_INFO("Loading parameters from ROS parameter server...");
+
+    if (!node_.getParam("barn_motion_tube_node/range_sensor/angular_resolution", range_sensor_.angular_resolution) ||
+        !node_.getParam("range_sensor/nb_measurements", range_sensor_.nb_measurements) ||
+        !node_.getParam("range_sensor/max_angle", range_sensor_.max_angle) ||
+        !node_.getParam("range_sensor/min_angle", range_sensor_.min_angle) ||
+        !node_.getParam("range_sensor/max_distance", range_sensor_.max_distance) ||
+        !node_.getParam("range_sensor/min_distance", range_sensor_.min_distance) ||
+        !node_.getParam("brake/trigger_threshold", brake_dist))
+    {
+        ROS_ERROR("Failed to load range_sensor parameters from parameter server.");
+        return;
+    }
+
+    barn_motion_tube_.Configure(&range_sensor_);
+    ROS_INFO("Range sensor configuration loaded successfully.");
 }
 
 void BarnMotionTubeNode::ScanCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
@@ -270,6 +287,8 @@ void BarnMotionTubeNode::ScanCallback(const sensor_msgs::LaserScan::ConstPtr& ms
         double v_weight_sum = 0;
         double w_weight_sum = 0;
         // std::cout << "[weight] "; 
+        // std::cout<< "travelling" << std::endl; 
+
         for(int i=0; i<number_of_voters; i++)
         {
             double weight = total_cost/best_cost_[i];
@@ -301,15 +320,19 @@ void BarnMotionTubeNode::ScanCallback(const sensor_msgs::LaserScan::ConstPtr& ms
         {
             twist_message.linear.x = v_desired;
             twist_message.angular.z = w;
-        }else
+        }else if (fabs(w) > 1e-3 && !goal_arrived)      
         {
             double r = v/w;    
             double w_clipped = std::max(std::min(v_desired/r, max_angular_rate), -max_angular_rate);
             twist_message.linear.x = r*w_clipped;
             twist_message.angular.z = w_clipped; 
+            std::cout<< "twisting" << std::endl; 
+
         }
         last_forward_vel=twist_message.linear.x ;
         last_w_vel = twist_message.angular.z;
+        std::cout<< "travelling" << std::endl; 
+
     }else 
     {   
         // obstacle avoidance behavior portion
@@ -326,10 +349,11 @@ void BarnMotionTubeNode::ScanCallback(const sensor_msgs::LaserScan::ConstPtr& ms
         
         
         // when footprint is increased, this case gets triggered mostly
+        // if no viable tube (bc of obs or goal behind robot), it'll not move
         else if (!goal_arrived){
             std::cout<< "avoidance" << std::endl; 
-            twist_message.linear.x = -0.3;
-            twist_message.angular.z = 0.0;
+            twist_message.linear.x = -0.1;
+            twist_message.angular.z = 0.1;
         }
         last_forward_vel=twist_message.linear.x;
     }
@@ -426,7 +450,7 @@ void BarnMotionTubeNode::OdomCallback(const nav_msgs::Odometry::ConstPtr& msg)
 {
     // Odom frame
     double x = msg->pose.pose.position.x;
-    double y = msg->pose.pose.position.y;
+    double y = msg->pose.pose.position.y; 
     double qx = msg->pose.pose.orientation.x;
     double qy = msg->pose.pose.orientation.y;
     double qz = msg->pose.pose.orientation.z;
@@ -444,32 +468,40 @@ void BarnMotionTubeNode::OdomCallback(const nav_msgs::Odometry::ConstPtr& msg)
 
         // You can use these values to compute the distance or other relative metrics
         // distance_to_goal = sqrt(goal_x_in_base * goal_x_in_base + goal_y_in_base * goal_y_in_base);
-        distance_to_goal = sqrt((goal_.pose.position.x - pose_odom_.x) * (goal_.pose.position.x - pose_odom_.x) + (goal_.pose.position.y - pose_odom_.y) * (goal_.pose.position.y - pose_odom_.y));
+        distance_to_goal = sqrt((goal_.goal.target_pose.pose.position.x- pose_odom_.x) * (goal_.goal.target_pose.pose.position.x - pose_odom_.x) + (goal_.goal.target_pose.pose.position.y - pose_odom_.y) * (goal_.goal.target_pose.pose.position.y - pose_odom_.y));
         std::cout<< distance_to_goal << std::endl;
 
         // Check if the robot has arrived at the goal. This distance threshold 
         // must be longer than the length of a generated motion tube / before distance_to_goal runs out
-        if (distance_to_goal < 0.5) {
+        if (distance_to_goal < brake_dist) {
             goal_arrived = true;
             std::cout << "goal reaching" <<std::endl;
         } else {
             goal_arrived = false;
-            // std::cout << "goal NOT reaching" <<std::endl;
+            std::cout << "goal NOT reaching" <<std::endl;
 
         }
 
 }
-
-void BarnMotionTubeNode::GoalCallback(const geometry_msgs::PoseStamped::ConstPtr& msg)
+void BarnMotionTubeNode::GoalCallback(const move_base_msgs::MoveBaseActionGoal::ConstPtr& msg)
 {
-    // Store the received goal
-    if (msg->pose.position.x != 0.0){
+    // Access the pose field through msg->goal.target_pose
+    if (msg->goal.target_pose.pose.position.x != 0.0) {
         goal_ = *msg;
-        std::cout<< "goal" << goal_ <<std::endl; 
+        std::cout << "Goal: " << goal_.goal.target_pose.pose.position.x << ", "
+                  << goal_.goal.target_pose.pose.position.y << std::endl;
+    }
+}
+// void BarnMotionTubeNode::GoalCallback(const geometry_msgs::PoseStamped::ConstPtr& msg)
+// {
+//     // Store the received goal
+//     if (msg->pose.position.x != 0.0){
+//         goal_ = *msg;
+//         std::cout<< "goal" << goal_ <<std::endl; 
     
-}
+// }
 
-}
+// }
 
 void BarnMotionTubeNode::GlobalNavPlannerCallback(const nav_msgs::Path::ConstPtr& msg)
 {
