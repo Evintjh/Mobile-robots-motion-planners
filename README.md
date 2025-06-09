@@ -1,23 +1,16 @@
-# Isaac-Sim-local-planners-testing
+# Mobile Robots Local planners / Motion planners
 
-## Requirements
-- Ensure that you have isaac sim properly installed
 
 ## Installation
 - Ensure you are in your <workspace>/src directory
 ```
-git clone https://github.com/Evintjh/Isaac-Sim-local-planners-testing.git
+git clone https://github.com/Evintjh/Mobile-Robots-local-planners.git
 cd ..
 catkin_make
 source devel/setup.bash
 ```
 
-## Run simulator
-```
-/isaac-sim/python.sh /<your directory>/jackal_launcher.py
-```
-
-## Testing dwa planner
+## Running the dwa planner
 ```
 roslaunch jackal_navigation odom_navigation_demo.launch
 ```
