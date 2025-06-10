@@ -1,4 +1,4 @@
-# Mobile Robots Motion planners for cluttered environments
+# Mobile Robots Motion Planners for Cluttered Environments
 ![6132134901575697787](https://github.com/user-attachments/assets/4671f018-010d-4d8a-a2d6-75458fa75a22)
 
 
